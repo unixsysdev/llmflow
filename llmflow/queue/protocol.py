@@ -306,6 +306,38 @@ class QueueProtocol:
                 break
         
         return transferred
+
+    async def context_switch(self, queue_id: str, new_security_level: SecurityLevel, 
+                            destination: Tuple[str, int] = None) -> bool:
+            """Switch the security context for a queue."""
+            try:
+                if destination is None:
+                    destination = (self.host, self.port)
+                    
+                message = QueueMessage(
+                    message_id=str(uuid.uuid4()),
+                    queue_id=queue_id,
+                    message_type=MessageType.CONTEXT_SWITCH,
+                    payload=msgpack.packb({
+                        'new_security_level': new_security_level.value,
+                        'timestamp': datetime.utcnow().isoformat()
+                    }),
+                    security_level=new_security_level,
+                    domain="default",
+                    tenant_id="system",
+                    timestamp=datetime.utcnow(),
+                    checksum=""
+                )
+                
+                # Send message
+                await self.send_message(message, destination)
+                logger.info(f"Context switch requested for queue {queue_id} to level {new_security_level}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Context switch failed for queue {queue_id}: {e}")
+                return False
+
     
     async def health_check(self) -> Dict[str, Any]:
         """Get health status of the queue system."""
