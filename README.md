@@ -2,7 +2,7 @@
 
 **Distributed queue-based application framework with self-optimization capabilities**
 
-LLMFlow is a revolutionary framework that implements a novel architectural pattern where applications are built from composable atoms and molecules, communicating entirely through queues, with built-in self-optimization using LLM-based analysis.
+LLMFlow is a "framework" that implements a novel architectural pattern where applications are built from composable atoms and molecules, communicating entirely through queues, with built-in self-optimization using LLM-based analysis.
 
 ## 🚀 Key Features
 
