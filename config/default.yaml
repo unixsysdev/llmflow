@@ -1,0 +1,212 @@
+# LLMFlow Default Configuration
+
+# Core system configuration
+core:
+  # Default plugins to use
+  serializer: messagepack
+  transport: udp
+  security: jwt
+  storage: in_memory
+  monitoring: prometheus
+
+# Plugin system configuration
+plugins:
+  # Plugin discovery settings
+  discovery:
+    paths:
+      - ./plugins
+      - ~/.llmflow/plugins
+      - /usr/local/lib/llmflow/plugins
+    auto_load: true
+    recursive_search: true
+    file_patterns:
+      - "*.py"
+      - "plugin.py"
+      - "__init__.py"
+    excluded_dirs:
+      - __pycache__
+      - .git
+      - tests
+  
+  # Plugin loading settings
+  loading:
+    validation_strict: true
+    dependency_resolution: true
+    hot_reload: false
+    rollback_on_failure: true
+    timeout_seconds: 30
+  
+  # Plugin-specific configurations
+  messagepack:
+    compression: true
+    schema_registry: true
+    
+  udp:
+    buffer_size: 65536
+    timeout_seconds: 5
+    reliability_layer: true
+    
+  jwt:
+    secret_key: ${JWT_SECRET}
+    expiration_seconds: 3600
+    algorithm: HS256
+    
+  in_memory:
+    max_items: 100000
+    cleanup_interval: 300
+    
+  prometheus:
+    port: 9090
+    metrics_path: /metrics
+    push_gateway: null
+
+# Queue system configuration
+queue:
+  default_size: 1000
+  max_message_size: 65536
+  timeout_seconds: 5
+  persistence: false
+  backup_interval: 3600
+  
+  # Queue-specific settings
+  protocol:
+    version: 1
+    header_size: 32
+    max_context_size: 1024
+    
+  # Security settings
+  security:
+    encryption: false
+    signing: true
+    context_validation: true
+
+# Conductor configuration
+conductor:
+  health_check_interval: 30
+  metrics_collection_interval: 10
+  process_timeout: 60
+  restart_on_failure: true
+  
+  # Monitoring settings
+  monitoring:
+    latency_threshold_ms: 1000
+    error_rate_threshold: 0.05
+    memory_threshold_mb: 512
+    
+  # Alerting settings
+  alerting:
+    enabled: true
+    channels:
+      - email
+      - slack
+    escalation_timeout: 300
+
+# Master system configuration
+master:
+  optimization_interval: 300
+  consensus_timeout: 10
+  cluster_size: 3
+  
+  # LLM optimization settings
+  optimization:
+    enabled: true
+    model: gpt-4
+    temperature: 0.1
+    max_tokens: 2048
+    
+  # Consensus settings
+  consensus:
+    algorithm: raft
+    election_timeout: 5
+    heartbeat_interval: 1
+
+# Security configuration
+security:
+  default_level: restricted
+  audit_logging: true
+  
+  # Authentication settings
+  authentication:
+    method: jwt
+    multi_factor: false
+    session_timeout: 3600
+    
+  # Authorization settings
+  authorization:
+    model: rbac
+    default_permissions: []
+    
+  # Encryption settings
+  encryption:
+    algorithm: aes-256-gcm
+    key_rotation_interval: 86400
+
+# Monitoring and observability
+monitoring:
+  enabled: true
+  metrics_retention: 7d
+  
+  # Metrics collection
+  metrics:
+    system: true
+    application: true
+    custom: true
+    
+  # Alerting
+  alerting:
+    enabled: true
+    notification_channels:
+      - type: email
+        recipients: []
+      - type: slack
+        webhook_url: ${SLACK_WEBHOOK}
+        
+  # Tracing
+  tracing:
+    enabled: false
+    sampling_rate: 0.1
+    
+  # Logging
+  logging:
+    level: INFO
+    format: json
+    output: stdout
+
+# Development settings
+development:
+  debug: false
+  hot_reload: true
+  test_mode: false
+  
+  # Development plugins
+  plugins:
+    dev_tools: true
+    debug_ui: true
+    
+  # Testing settings
+  testing:
+    mock_external_services: true
+    test_data_path: ./test_data
+    
+# Production settings
+production:
+  debug: false
+  hot_reload: false
+  
+  # Performance settings
+  performance:
+    max_workers: 10
+    connection_pool_size: 100
+    cache_size: 1000
+    
+  # Reliability settings
+  reliability:
+    circuit_breaker: true
+    retry_attempts: 3
+    timeout_seconds: 30
+    
+  # Deployment settings
+  deployment:
+    container_registry: docker.io
+    health_check_path: /health
+    metrics_path: /metrics

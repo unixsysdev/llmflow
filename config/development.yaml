@@ -1,0 +1,124 @@
+# LLMFlow Development Configuration
+
+# Override core settings for development
+core:
+  serializer: json  # Use JSON for easier debugging
+  security: none    # Disable security for development
+
+# Development-specific plugin settings
+plugins:
+  discovery:
+    auto_load: true
+    recursive_search: true
+    
+  loading:
+    validation_strict: false  # Allow more flexible validation
+    hot_reload: true         # Enable hot reloading
+    rollback_on_failure: false
+    
+  # Development plugin configurations
+  json:
+    pretty_print: true
+    compression: false
+    
+  none:
+    # No security provider configuration needed
+    
+  in_memory:
+    max_items: 10000  # Smaller limit for development
+    cleanup_interval: 60
+
+# Development queue settings
+queue:
+  default_size: 100
+  max_message_size: 16384
+  timeout_seconds: 10
+  persistence: false
+
+# Development conductor settings
+conductor:
+  health_check_interval: 10
+  metrics_collection_interval: 5
+  process_timeout: 30
+  restart_on_failure: false  # Don't auto-restart in development
+  
+  monitoring:
+    latency_threshold_ms: 5000  # More lenient thresholds
+    error_rate_threshold: 0.1
+    memory_threshold_mb: 256
+
+# Development master settings
+master:
+  optimization_interval: 60  # More frequent optimization
+  consensus_timeout: 5
+  cluster_size: 1  # Single node for development
+  
+  optimization:
+    enabled: false  # Disable LLM optimization in development
+    
+  consensus:
+    algorithm: single_node  # No consensus needed
+
+# Development security settings
+security:
+  default_level: public  # Open access for development
+  audit_logging: false
+  
+  authentication:
+    method: none
+    
+  authorization:
+    model: allow_all
+
+# Development monitoring
+monitoring:
+  enabled: true
+  metrics_retention: 1h  # Short retention for development
+  
+  metrics:
+    system: false
+    application: true
+    custom: true
+    
+  alerting:
+    enabled: false  # Disable alerting in development
+    
+  tracing:
+    enabled: true
+    sampling_rate: 1.0  # Trace everything in development
+    
+  logging:
+    level: DEBUG
+    format: text
+    output: stdout
+
+# Development-specific settings
+development:
+  debug: true
+  hot_reload: true
+  test_mode: false
+  
+  plugins:
+    dev_tools: true
+    debug_ui: true
+    
+  testing:
+    mock_external_services: true
+    test_data_path: ./test_data
+    
+  # Development server settings
+  server:
+    auto_restart: true
+    debug_mode: true
+    profiling: true
+    
+  # Development database settings
+  database:
+    reset_on_start: true
+    seed_data: true
+    
+  # Development networking
+  networking:
+    cors_enabled: true
+    cors_origins: ["*"]
+    debug_requests: true

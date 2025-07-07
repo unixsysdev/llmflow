@@ -1,0 +1,213 @@
+# LLMFlow Production Configuration
+
+# Production core settings
+core:
+  serializer: messagepack  # Efficient binary serialization
+  transport: tcp           # Reliable transport for production
+  security: jwt           # Full security enabled
+  storage: postgresql     # Persistent storage
+  monitoring: prometheus  # Full monitoring
+
+# Production plugin settings
+plugins:
+  discovery:
+    auto_load: false  # Manual plugin loading in production
+    recursive_search: false
+    
+  loading:
+    validation_strict: true
+    hot_reload: false      # No hot reload in production
+    rollback_on_failure: true
+    timeout_seconds: 60
+    
+  # Production plugin configurations
+  messagepack:
+    compression: true
+    schema_registry: true
+    
+  tcp:
+    connection_pool_size: 100
+    keep_alive: true
+    timeout_seconds: 30
+    
+  jwt:
+    secret_key: ${JWT_SECRET}
+    expiration_seconds: 1800  # 30 minutes
+    algorithm: RS256          # RSA encryption
+    
+  postgresql:
+    host: ${DB_HOST}
+    port: ${DB_PORT}
+    database: ${DB_NAME}
+    user: ${DB_USER}
+    password: ${DB_PASSWORD}
+    ssl_mode: require
+    max_connections: 50
+    
+  prometheus:
+    port: 9090
+    metrics_path: /metrics
+    push_gateway: ${PROMETHEUS_PUSH_GATEWAY}
+
+# Production queue settings
+queue:
+  default_size: 10000
+  max_message_size: 1048576  # 1MB
+  timeout_seconds: 30
+  persistence: true
+  backup_interval: 900  # 15 minutes
+  
+  protocol:
+    version: 1
+    header_size: 64
+    max_context_size: 2048
+    
+  security:
+    encryption: true
+    signing: true
+    context_validation: true
+
+# Production conductor settings
+conductor:
+  health_check_interval: 60
+  metrics_collection_interval: 30
+  process_timeout: 120
+  restart_on_failure: true
+  
+  monitoring:
+    latency_threshold_ms: 500
+    error_rate_threshold: 0.01
+    memory_threshold_mb: 1024
+    
+  alerting:
+    enabled: true
+    channels:
+      - email
+      - slack
+      - pagerduty
+    escalation_timeout: 300
+
+# Production master settings
+master:
+  optimization_interval: 3600  # 1 hour
+  consensus_timeout: 30
+  cluster_size: 5
+  
+  optimization:
+    enabled: true
+    model: gpt-4
+    temperature: 0.05
+    max_tokens: 4096
+    
+  consensus:
+    algorithm: raft
+    election_timeout: 10
+    heartbeat_interval: 2
+
+# Production security settings
+security:
+  default_level: confidential
+  audit_logging: true
+  
+  authentication:
+    method: jwt
+    multi_factor: true
+    session_timeout: 1800
+    
+  authorization:
+    model: rbac
+    default_permissions: []
+    
+  encryption:
+    algorithm: aes-256-gcm
+    key_rotation_interval: 3600
+
+# Production monitoring
+monitoring:
+  enabled: true
+  metrics_retention: 30d
+  
+  metrics:
+    system: true
+    application: true
+    custom: true
+    
+  alerting:
+    enabled: true
+    notification_channels:
+      - type: email
+        recipients: ${ALERT_EMAIL_RECIPIENTS}
+      - type: slack
+        webhook_url: ${SLACK_WEBHOOK}
+      - type: pagerduty
+        integration_key: ${PAGERDUTY_KEY}
+        
+  tracing:
+    enabled: true
+    sampling_rate: 0.01  # 1% sampling
+    
+  logging:
+    level: INFO
+    format: json
+    output: file
+    file_path: /var/log/llmflow/application.log
+    rotation: daily
+    retention: 30d
+
+# Production-specific settings
+production:
+  debug: false
+  hot_reload: false
+  
+  performance:
+    max_workers: 20
+    connection_pool_size: 200
+    cache_size: 10000
+    
+  reliability:
+    circuit_breaker: true
+    retry_attempts: 5
+    timeout_seconds: 60
+    
+  deployment:
+    container_registry: ${CONTAINER_REGISTRY}
+    health_check_path: /health
+    metrics_path: /metrics
+    
+  # Production database settings
+  database:
+    backup_interval: 3600
+    replica_count: 2
+    ssl_required: true
+    
+  # Production networking
+  networking:
+    cors_enabled: false
+    rate_limiting: true
+    ip_whitelist: ${ALLOWED_IPS}
+    
+  # Production scaling
+  scaling:
+    auto_scaling: true
+    min_replicas: 3
+    max_replicas: 10
+    cpu_threshold: 70
+    memory_threshold: 80
+
+# Environment-specific overrides
+environment:
+  name: production
+  region: ${AWS_REGION}
+  cluster: ${CLUSTER_NAME}
+  
+  # Resource limits
+  resources:
+    cpu_limit: 2000m
+    memory_limit: 4Gi
+    storage_limit: 100Gi
+    
+  # High availability
+  high_availability:
+    enabled: true
+    zones: 3
+    backup_region: ${BACKUP_REGION}
