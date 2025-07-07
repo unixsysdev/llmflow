@@ -5,3 +5,5 @@ cryptography
 uvloop
 pytest
 pytest-asyncio
+bcrypt
+psutil
