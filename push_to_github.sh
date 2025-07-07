@@ -21,7 +21,7 @@ git commit -m "Initial commit: LLMFlow framework implementation
 - Project structure and configuration files"
 
 # Add remote origin (replace with your actual GitHub URL)
-git remote add origin https://github.com/yourusername/llmflow.git
+git remote add origin git@github.com:unixsysdev/llmflow.git
 
 # Push to main branch
 git branch -M main
