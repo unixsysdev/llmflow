@@ -187,7 +187,8 @@ class PluginValidator:
     def _validate_plugin_metadata(self, plugin: Plugin, result: ValidationResult) -> None:
         """Validate plugin metadata."""
         try:
-            metadata = plugin.get_metadata()
+            # Use the base plugin's get_metadata method
+            metadata = Plugin.get_metadata(plugin)
             
             if not isinstance(metadata, dict):
                 result.add_error("Plugin metadata must be a dictionary")
