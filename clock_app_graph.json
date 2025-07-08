@@ -1,0 +1,299 @@
+{
+  "id": "0f2fed2c-ff5e-4ed1-b1e3-03be0a5d0652",
+  "name": "LLMFlow Clock App",
+  "description": "Real-time clock application with graph-based architecture",
+  "version": "1.0.0",
+  "created_at": "2025-07-08T12:19:02.961696",
+  "components": {
+    "atom_1": {
+      "id": "atom_1",
+      "name": "TimeAtom",
+      "component_type": "service_atom",
+      "description": "Atomic time data type with validation",
+      "input_types": [],
+      "output_types": [
+        "time_data"
+      ],
+      "input_queues": [],
+      "output_queues": [
+        "time_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "data_type": "timestamp",
+        "validation": "timezone-aware datetime",
+        "serialization": "ISO format"
+      },
+      "dependencies": []
+    },
+    "atom_2": {
+      "id": "atom_2",
+      "name": "ClockStateAtom",
+      "component_type": "service_atom",
+      "description": "Clock state management atom",
+      "input_types": [
+        "time_data"
+      ],
+      "output_types": [
+        "clock_state"
+      ],
+      "input_queues": [
+        "state_input"
+      ],
+      "output_queues": [
+        "state_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "state_fields": [
+          "current_time",
+          "timezone",
+          "format",
+          "is_running"
+        ],
+        "persistence": "in-memory with backup"
+      },
+      "dependencies": []
+    },
+    "atom_3": {
+      "id": "atom_3",
+      "name": "TimeFormatterAtom",
+      "component_type": "service_atom",
+      "description": "Time formatting service atom",
+      "input_types": [
+        "time_data"
+      ],
+      "output_types": [
+        "formatted_time"
+      ],
+      "input_queues": [
+        "format_input"
+      ],
+      "output_queues": [
+        "format_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "formats": [
+          "HH:MM:SS",
+          "12-hour",
+          "24-hour",
+          "ISO"
+        ],
+        "localization": "timezone-aware"
+      },
+      "dependencies": []
+    },
+    "molecule_1": {
+      "id": "molecule_1",
+      "name": "ClockLogicMolecule",
+      "component_type": "molecule",
+      "description": "Core clock business logic",
+      "input_types": [
+        "time_data",
+        "clock_state"
+      ],
+      "output_types": [
+        "time_update",
+        "state_update"
+      ],
+      "input_queues": [
+        "logic_time_input",
+        "logic_state_input"
+      ],
+      "output_queues": [
+        "logic_time_output",
+        "logic_state_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "functionality": "real-time updates, timezone conversion, format management",
+        "update_interval": "1 second",
+        "error_handling": "graceful degradation"
+      },
+      "dependencies": [
+        "atom_1",
+        "atom_2"
+      ]
+    },
+    "molecule_2": {
+      "id": "molecule_2",
+      "name": "DisplayMolecule",
+      "component_type": "molecule",
+      "description": "Display management molecule",
+      "input_types": [
+        "formatted_time",
+        "state_update"
+      ],
+      "output_types": [
+        "display_command"
+      ],
+      "input_queues": [
+        "display_time_input",
+        "display_state_input"
+      ],
+      "output_queues": [
+        "display_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "display_types": [
+          "console",
+          "web",
+          "api"
+        ],
+        "refresh_strategy": "delta updates only",
+        "styling": "configurable themes"
+      },
+      "dependencies": [
+        "atom_3",
+        "molecule_1"
+      ]
+    },
+    "cell_1": {
+      "id": "cell_1",
+      "name": "ClockApplicationCell",
+      "component_type": "cell",
+      "description": "Complete clock application orchestrator",
+      "input_types": [
+        "display_command"
+      ],
+      "output_types": [
+        "app_status"
+      ],
+      "input_queues": [
+        "app_input"
+      ],
+      "output_queues": [
+        "app_status_output"
+      ],
+      "max_latency_ms": null,
+      "max_memory_mb": null,
+      "max_cpu_percent": null,
+      "implementation_hints": {
+        "orchestration": "coordinate all components",
+        "lifecycle": "startup, running, shutdown",
+        "monitoring": "health checks and metrics"
+      },
+      "dependencies": [
+        "molecule_1",
+        "molecule_2"
+      ]
+    }
+  },
+  "connections": {
+    "conn_1": {
+      "id": "conn_1",
+      "source_component": "atom_1",
+      "target_component": "atom_2",
+      "source_queue": "time_output",
+      "target_queue": "state_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "time_data"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    },
+    "conn_2": {
+      "id": "conn_2",
+      "source_component": "atom_1",
+      "target_component": "atom_3",
+      "source_queue": "time_output",
+      "target_queue": "format_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "time_data"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    },
+    "conn_3": {
+      "id": "conn_3",
+      "source_component": "atom_2",
+      "target_component": "molecule_1",
+      "source_queue": "state_output",
+      "target_queue": "logic_state_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "clock_state"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    },
+    "conn_4": {
+      "id": "conn_4",
+      "source_component": "atom_3",
+      "target_component": "molecule_2",
+      "source_queue": "format_output",
+      "target_queue": "display_time_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "formatted_time"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    },
+    "conn_5": {
+      "id": "conn_5",
+      "source_component": "molecule_1",
+      "target_component": "molecule_2",
+      "source_queue": "logic_state_output",
+      "target_queue": "display_state_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "state_update"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    },
+    "conn_6": {
+      "id": "conn_6",
+      "source_component": "molecule_2",
+      "target_component": "cell_1",
+      "source_queue": "display_output",
+      "target_queue": "app_input",
+      "connection_type": "data_flow",
+      "data_types": [
+        "display_command"
+      ],
+      "buffer_size": 1000,
+      "timeout_ms": 5000,
+      "retry_attempts": 3,
+      "validation_rules": {}
+    }
+  },
+  "global_config": {
+    "default_timezone": "UTC",
+    "update_interval_ms": 1000,
+    "display_format": "24-hour",
+    "queue_buffer_size": 1000,
+    "enable_monitoring": true
+  },
+  "performance_goals": {
+    "max_latency_ms": 50,
+    "target_throughput_ops_per_sec": 1000,
+    "max_memory_mb": 100,
+    "max_cpu_percent": 10
+  }
+}

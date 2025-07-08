@@ -414,7 +414,7 @@ Generate production-ready, efficient, and well-documented code that perfectly im
                                        component_spec: ComponentSpec) -> Optional[GeneratedComponent]:
         """Parse LLM response into GeneratedComponent."""
         try:
-            # Try to parse as JSON
+            # Try to parse as JSON first
             response_data = json.loads(response_content)
             
             generated_code = response_data.get('generated_code', '')
@@ -456,13 +456,27 @@ Generate production-ready, efficient, and well-documented code that perfectly im
                 end = response_content.find('```', start)
                 if end > start:
                     generated_code = response_content[start:end].strip()
-                    return GeneratedComponent(
-                        component_spec=component_spec,
-                        generated_code=generated_code,
-                        confidence=0.6,  # Lower confidence for unparsed response
-                        metadata={'raw_response': True}
-                    )
+                    
+                    # Simple validation
+                    if len(generated_code) > 50 and ('class' in generated_code or 'def' in generated_code):
+                        return GeneratedComponent(
+                            component_spec=component_spec,
+                            generated_code=generated_code,
+                            confidence=0.7,
+                            metadata={'extracted_from_markdown': True}
+                        )
             
+            # Try to extract any code-like content
+            if 'class' in response_content and 'def' in response_content:
+                # Simple extraction - just return the response as-is if it contains code
+                return GeneratedComponent(
+                    component_spec=component_spec,
+                    generated_code=response_content,
+                    confidence=0.5,
+                    metadata={'raw_response': True}
+                )
+            
+            logger.error(f"Could not extract usable code from response for {component_spec.name}")
             return None
         except Exception as e:
             logger.error(f"Error parsing generation response for {component_spec.name}: {e}")

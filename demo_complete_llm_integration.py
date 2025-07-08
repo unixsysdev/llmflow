@@ -448,7 +448,7 @@ async def run_quick_demo():
         generator = LLMComponentGenerator()
         
         # Get first atom to test
-        atoms = graph.get_components_by_type(ComponentType.ATOM)
+        atoms = graph.get_components_by_type(ComponentType.SERVICE_ATOM)
         if atoms:
             test_component = atoms[0]
             print(f"   Testing: {test_component.name}")

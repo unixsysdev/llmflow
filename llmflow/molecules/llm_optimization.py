@@ -11,7 +11,7 @@ import uuid
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from ..atoms.base import ServiceAtom, DataAtom
+from ..core.base import ServiceAtom, DataAtom
 from ..atoms.data import StringAtom, BooleanAtom
 from ..atoms.llm import (
     LLMRequest, LLMResponse, LLMRequestAtom, LLMResponseAtom, OpenAIServiceAtom

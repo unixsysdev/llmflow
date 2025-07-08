@@ -20,8 +20,8 @@ except ImportError:
     openai = None
     AsyncOpenAI = None
 
-from ..atoms.base import ServiceAtom, DataAtom
-from ..atoms.data import StringAtom, BooleanAtom, IntegerAtom, FloatAtom
+from ..core.base import ServiceAtom, DataAtom
+from ..atoms.data import StringAtom, BooleanAtom, IntegerAtom
 from ..plugins.config import get_global_config_loader
 
 logger = logging.getLogger(__name__)

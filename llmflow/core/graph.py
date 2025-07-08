@@ -169,7 +169,7 @@ class GraphDefinition:
             if not ready_components:
                 # Circular dependency - break it by deploying atoms first
                 atoms = [cid for cid in remaining_components 
-                        if self.components[cid].component_type == ComponentType.ATOM]
+                        if self.components[cid].component_type == ComponentType.SERVICE_ATOM]
                 if atoms:
                     ready_components = atoms[:1]
                 else:
@@ -317,12 +317,12 @@ class GraphBuilder:
                  input_queues: List[str] = None, output_queues: List[str] = None,
                  **kwargs) -> str:
         """Add an atom component."""
-        component_id = f"atom_{len([c for c in self.graph.components.values() if c.component_type == ComponentType.ATOM]) + 1}"
+        component_id = f"atom_{len([c for c in self.graph.components.values() if c.component_type == ComponentType.SERVICE_ATOM]) + 1}"
         
         component = ComponentSpec(
             id=component_id,
             name=name,
-            component_type=ComponentType.ATOM,
+            component_type=ComponentType.SERVICE_ATOM,
             description=description,
             input_types=input_types or [],
             output_types=output_types or [],
