@@ -19,6 +19,9 @@ from ..molecules.optimization import (
     PerformanceMetricsAtom, OptimizationRecommendationAtom,
     PerformanceAnalysisMolecule, OptimizationRecommendationMolecule
 )
+from ..molecules.llm_optimization import (
+    LLMCodeAnalysisMolecule, LLMOptimizationGeneratorMolecule, LLMSystemOptimizationMolecule
+)
 from ..atoms.data import StringAtom
 
 logger = logging.getLogger(__name__)
@@ -55,7 +58,12 @@ class LLMOptimizer:
         self.queue_manager = queue_manager
         self.running = False
         
-        # Analysis molecules
+        # NEW: LLM-powered analysis molecules
+        self.llm_code_analysis = LLMCodeAnalysisMolecule(queue_manager)
+        self.llm_optimization_generator = LLMOptimizationGeneratorMolecule(queue_manager)
+        self.llm_system_optimization = LLMSystemOptimizationMolecule(queue_manager)
+        
+        # Legacy molecules for fallback
         self.performance_analysis = PerformanceAnalysisMolecule(queue_manager)
         self.optimization_recommendation = OptimizationRecommendationMolecule(queue_manager)
         
@@ -72,21 +80,27 @@ class LLMOptimizer:
             'task_timeout_seconds': 300,
             'metrics_threshold_for_optimization': 10,
             'optimization_cooldown_minutes': 60,
-            'max_optimization_attempts': 3
+            'max_optimization_attempts': 3,
+            'use_llm_optimization': True,  # NEW: Enable LLM optimization
+            'llm_fallback_enabled': True   # NEW: Fallback to simple optimization
         }
         
         # Worker tasks
         self.worker_tasks: List[asyncio.Task] = []
         
-        # Metrics
+        # Enhanced metrics
         self.optimizer_metrics = {
             'total_tasks': 0,
             'completed_tasks': 0,
             'failed_tasks': 0,
             'active_tasks': 0,
             'recommendations_generated': 0,
-            'optimizations_applied': 0
+            'optimizations_applied': 0,
+            'llm_analyses_performed': 0,
+            'llm_recommendations_generated': 0,
+            'fallback_optimizations': 0
         }
+
     
     async def start(self) -> None:
         """Start the LLM optimizer."""
@@ -297,51 +311,214 @@ class LLMOptimizer:
             logger.error(f"Failed to process optimization task {task.task_id}: {e}")
     
     async def _analyze_performance(self, context: OptimizationContext) -> str:
-        """Analyze performance metrics."""
+        """Analyze performance metrics using LLM-powered analysis."""
         if not context.metrics_history:
             return json.dumps({'error': 'No metrics available'})
         
-        # Get recent metrics
-        recent_metrics = context.metrics_history[-1]
-        metrics_atom = PerformanceMetricsAtom(recent_metrics)
+        try:
+            # Use LLM analysis if enabled and available
+            if self.config.get('use_llm_optimization', True):
+                # Prepare metrics data
+                recent_metrics = context.metrics_history[-5:]  # Last 5 metrics
+                metrics_json = json.dumps([m.to_dict() for m in recent_metrics], indent=2)
+                
+                # Use LLM code analysis molecule
+                analysis_result = await self.llm_code_analysis.process([
+                    StringAtom(context.source_code),
+                    StringAtom(metrics_json)
+                ])
+                
+                if analysis_result and len(analysis_result) >= 2:
+                    analysis_content = analysis_result[0].value
+                    issues_found = analysis_result[1].value
+                    
+                    self.optimizer_metrics['llm_analyses_performed'] += 1
+                    
+                    logger.info(f"LLM analysis completed for {context.component_name}, issues: {issues_found}")
+                    return analysis_content
         
-        # Analyze using performance analysis molecule
-        analysis_result = await self.performance_analysis.process([metrics_atom])
+        except Exception as e:
+            logger.warning(f"LLM analysis failed for {context.component_name}: {e}")
         
-        if analysis_result and len(analysis_result) > 0:
-            return analysis_result[0].value
+        # Fallback to traditional analysis
+        if self.config.get('llm_fallback_enabled', True):
+            logger.info(f"Using fallback analysis for {context.component_name}")
+            
+            recent_metrics = context.metrics_history[-1]
+            metrics_atom = PerformanceMetricsAtom(recent_metrics)
+            
+            analysis_result = await self.performance_analysis.process([metrics_atom])
+            
+            if analysis_result and len(analysis_result) > 0:
+                self.optimizer_metrics['fallback_optimizations'] += 1
+                return analysis_result[0].value
         
-        return json.dumps({'error': 'Analysis failed'})
+        return json.dumps({'error': 'All analysis methods failed'})
+
     
     async def _generate_optimization_recommendation(self, context: OptimizationContext, 
                                                    analysis_report: str) -> OptimizationRecommendation:
-        """Generate optimization recommendation."""
-        # Prepare input atoms
-        analysis_atom = StringAtom(analysis_report)
-        code_atom = StringAtom(context.source_code)
+        """Generate optimization recommendation using LLM."""
+        try:
+            # Determine optimization type from analysis
+            optimization_type = await self._determine_optimization_type(analysis_report)
+            
+            # Use LLM optimization generator if enabled
+            if self.config.get('use_llm_optimization', True):
+                logger.info(f"Generating LLM optimization for {context.component_name}, type: {optimization_type}")
+                
+                recommendation_result = await self.llm_optimization_generator.process([
+                    StringAtom(analysis_report),
+                    StringAtom(context.source_code),
+                    StringAtom(optimization_type)
+                ])
+                
+                if recommendation_result and len(recommendation_result) > 0:
+                    recommendation = recommendation_result[0].recommendation
+                    
+                    # Validate recommendation quality
+                    if recommendation.confidence_score >= 0.5 and not recommendation.description.startswith("Optimization generation failed"):
+                        self.optimizer_metrics['llm_recommendations_generated'] += 1
+                        logger.info(f"LLM recommendation generated: {recommendation.recommendation_id}")
+                        return recommendation
+                    else:
+                        logger.warning(f"Low quality LLM recommendation, falling back: {recommendation.description}")
         
-        # Generate recommendation using optimization molecule
-        recommendation_result = await self.optimization_recommendation.process([
-            analysis_atom, code_atom
-        ])
+        except Exception as e:
+            logger.warning(f"LLM optimization generation failed for {context.component_name}: {e}")
         
-        if recommendation_result and len(recommendation_result) > 0:
-            return recommendation_result[0].recommendation
+        # Fallback to traditional optimization
+        if self.config.get('llm_fallback_enabled', True):
+            logger.info(f"Using fallback optimization for {context.component_name}")
+            
+            analysis_atom = StringAtom(analysis_report)
+            code_atom = StringAtom(context.source_code)
+            
+            recommendation_result = await self.optimization_recommendation.process([
+                analysis_atom, code_atom
+            ])
+            
+            if recommendation_result and len(recommendation_result) > 0:
+                self.optimizer_metrics['fallback_optimizations'] += 1
+                return recommendation_result[0].recommendation
         
-        # Fallback recommendation
+        # Ultimate fallback
         return OptimizationRecommendation(
             recommendation_id=str(uuid.uuid4()),
             target_component=context.component_name,
-            recommendation_type="general_optimization",
-            description="General performance optimization needed",
+            optimization_type=optimization_type,
+            description=f"Automated {optimization_type} optimization needed - analysis available but optimization generation failed",
             expected_improvement=0.1,
-            confidence_score=0.5,
+            confidence_score=0.3,
             metadata={
                 'created_at': datetime.utcnow().isoformat(),
-                'fallback': True
+                'fallback': True,
+                'analysis_available': True
             }
         )
     
+    async def _determine_optimization_type(self, analysis_report: str) -> str:
+        """Determine the primary optimization type from analysis report."""
+        try:
+            # Try to parse as JSON first
+            analysis_data = json.loads(analysis_report)
+            
+            # Check for specific optimization opportunities
+            if 'optimization_opportunities' in analysis_data:
+                opportunities = analysis_data['optimization_opportunities']
+                if opportunities:
+                    # Return the highest priority optimization type
+                    for opp in opportunities:
+                        if opp.get('severity') in ['high', 'critical']:
+                            return opp.get('type', 'latency_optimization')
+                    
+                    # Return first opportunity type if no high/critical
+                    return opportunities[0].get('type', 'latency_optimization')
+            
+            # Check primary concerns
+            if 'primary_concerns' in analysis_data:
+                concerns = analysis_data['primary_concerns']
+                if concerns:
+                    concern_text = ' '.join(concerns).lower()
+                    
+                    if 'memory' in concern_text or 'leak' in concern_text:
+                        return 'memory_optimization'
+                    elif 'error' in concern_text or 'exception' in concern_text:
+                        return 'error_reduction'
+                    elif 'slow' in concern_text or 'latency' in concern_text:
+                        return 'latency_optimization'
+                    elif 'throughput' in concern_text or 'performance' in concern_text:
+                        return 'throughput_optimization'
+        
+        except json.JSONDecodeError:
+            # Fallback to text analysis
+            analysis_lower = analysis_report.lower()
+            
+            if 'memory' in analysis_lower or 'leak' in analysis_lower:
+                return 'memory_optimization'
+            elif 'error' in analysis_lower or 'exception' in analysis_lower:
+                return 'error_reduction'
+            elif 'slow' in analysis_lower or 'latency' in analysis_lower:
+                return 'latency_optimization'
+            elif 'throughput' in analysis_lower:
+                return 'throughput_optimization'
+        
+        # Default fallback
+        return 'latency_optimization'
+    
+    async def analyze_system_performance(self) -> str:
+        """Perform system-wide performance analysis using LLM."""
+        try:
+            # Collect system-wide data
+            system_data = {
+                'timestamp': datetime.utcnow().isoformat(),
+                'total_components': len(self.component_contexts),
+                'active_optimizations': self.optimizer_metrics['active_tasks'],
+                'component_summary': []
+            }
+            
+            # Add component summaries
+            for context in self.component_contexts.values():
+                if context.metrics_history:
+                    recent_metrics = context.metrics_history[-3:]  # Last 3 metrics
+                    avg_latency = sum(m.latency_ms for m in recent_metrics) / len(recent_metrics)
+                    avg_error_rate = sum(m.error_rate for m in recent_metrics) / len(recent_metrics)
+                    
+                    system_data['component_summary'].append({
+                        'component_id': context.component_id,
+                        'component_name': context.component_name,
+                        'component_type': context.component_type,
+                        'avg_latency_ms': avg_latency,
+                        'avg_error_rate': avg_error_rate,
+                        'optimization_count': len(context.optimization_history),
+                        'last_optimization': context.optimization_history[-1].metadata.get('created_at') if context.optimization_history else None
+                    })
+            
+            # Use LLM system optimization molecule
+            if self.config.get('use_llm_optimization', True):
+                system_data_json = json.dumps(system_data, indent=2)
+                
+                analysis_result = await self.llm_system_optimization.process([
+                    StringAtom(system_data_json)
+                ])
+                
+                if analysis_result and len(analysis_result) > 0:
+                    logger.info("System-wide LLM analysis completed")
+                    return analysis_result[0].value
+            
+            # Fallback to basic system analysis
+            return json.dumps({
+                'system_health': 'unknown',
+                'message': 'Basic system data collected',
+                'data': system_data
+            }, indent=2)
+        
+        except Exception as e:
+            logger.error(f"System performance analysis failed: {e}")
+            return json.dumps({
+                'error': str(e),
+                'timestamp': datetime.utcnow().isoformat()
+            })    
     async def _send_optimization_result(self, task: OptimizationTask) -> None:
         """Send optimization result to the optimization queue."""
         try:

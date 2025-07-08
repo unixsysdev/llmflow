@@ -35,6 +35,14 @@ from .service import (
     LogicNotAtom
 )
 
+from .llm import (
+    LLMRequest,
+    LLMResponse,
+    LLMRequestAtom,
+    LLMResponseAtom,
+    OpenAIServiceAtom
+)
+
 __all__ = [
     # Data Atoms
     'StringAtom',
@@ -62,5 +70,12 @@ __all__ = [
     'AddIntegersAtom',
     'LogicAndAtom',
     'LogicOrAtom',
-    'LogicNotAtom'
+    'LogicNotAtom',
+    
+    # LLM Atoms
+    'LLMRequest',
+    'LLMResponse',
+    'LLMRequestAtom',
+    'LLMResponseAtom',
+    'OpenAIServiceAtom'
 ]

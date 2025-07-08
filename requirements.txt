@@ -8,3 +8,5 @@ pytest-asyncio
 bcrypt
 psutil
 PyYAML
+openai>=1.0.0
+aiohttp

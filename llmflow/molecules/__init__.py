@@ -32,6 +32,12 @@ from .optimization import (
     OptimizationRecommendationMolecule
 )
 
+from .llm_optimization import (
+    LLMCodeAnalysisMolecule,
+    LLMOptimizationGeneratorMolecule,
+    LLMSystemOptimizationMolecule
+)
+
 __all__ = [
     # Authentication
     'UserCredentialsAtom',
@@ -55,5 +61,10 @@ __all__ = [
     'PerformanceMetricsAtom',
     'OptimizationRecommendationAtom',
     'PerformanceAnalysisMolecule',
-    'OptimizationRecommendationMolecule'
+    'OptimizationRecommendationMolecule',
+    
+    # LLM-Powered Optimization
+    'LLMCodeAnalysisMolecule',
+    'LLMOptimizationGeneratorMolecule',
+    'LLMSystemOptimizationMolecule'
 ]

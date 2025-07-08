@@ -491,5 +491,22 @@ def load_default_configuration() -> Dict[str, Any]:
         'master': {
             'optimization_interval': 300,
             'consensus_timeout': 10
+        },
+        'llm': {
+            'provider': 'openai',
+            'api_key': None,  # Set via OPENAI_API_KEY environment variable
+            'model': 'gpt-4',
+            'fallback_model': 'gpt-3.5-turbo',
+            'max_tokens': 4000,
+            'temperature': 0.1,
+            'timeout_seconds': 30,
+            'retry_attempts': 3,
+            'optimization': {
+                'enabled': True,
+                'confidence_threshold': 0.7,
+                'auto_apply_threshold': 0.9,
+                'validation_required': True
+            }
         }
     }
+
