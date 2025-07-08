@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Add llmflow to path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
     from llmflow.core.graph import create_clock_app_graph, GraphDefinition
