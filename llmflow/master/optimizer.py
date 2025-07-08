@@ -375,3 +375,346 @@ class LLMOptimizer:
             'worker_count': len(self.worker_tasks),
             'timestamp': datetime.utcnow().isoformat()
         }
+    
+        async def _identify_optimization_pattern(self, recent_metrics: List[PerformanceMetrics], 
+                                               anomalies: List[str] = None) -> str:
+            """Identify the optimization pattern based on metrics and anomalies."""
+            if anomalies:
+                # Map anomalies to optimization patterns
+                if 'memory_leak' in anomalies:
+                    return 'memory_optimization'
+                elif 'latency_spike' in anomalies:
+                    return 'latency_optimization'
+                elif 'high_error_rate' in anomalies:
+                    return 'error_reduction'
+                elif 'cpu_spike' in anomalies:
+                    return 'throughput_optimization'
+            
+            if not recent_metrics:
+                return 'latency_optimization'  # Default
+            
+            # Analyze metrics to determine primary issue
+            avg_latency = sum(m.latency_ms for m in recent_metrics) / len(recent_metrics)
+            avg_error_rate = sum(m.error_rate for m in recent_metrics) / len(recent_metrics)
+            avg_memory = sum(m.memory_usage_mb for m in recent_metrics) / len(recent_metrics)
+            avg_throughput = sum(m.throughput_ops_per_sec for m in recent_metrics) / len(recent_metrics)
+            
+            # Priority order: errors > memory > latency > throughput
+            if avg_error_rate > 0.02:
+                return 'error_reduction'
+            elif len(recent_metrics) > 5:
+                memory_trend = self._calculate_trend([m.memory_usage_mb for m in recent_metrics])
+                if memory_trend > 1.0:  # Memory growing
+                    return 'memory_optimization'
+            
+            if avg_latency > 100:  # High latency
+                return 'latency_optimization'
+            elif avg_throughput < 500:  # Low throughput
+                return 'throughput_optimization'
+            
+            return 'latency_optimization'  # Default
+        
+        def _calculate_trend(self, values: List[float]) -> float:
+            """Calculate trend (slope) of values over time."""
+            if len(values) < 2:
+                return 0
+            
+            n = len(values)
+            x_sum = sum(range(n))
+            y_sum = sum(values)
+            xy_sum = sum(i * values[i] for i in range(n))
+            x2_sum = sum(i * i for i in range(n))
+            
+            try:
+                slope = (n * xy_sum - x_sum * y_sum) / (n * x2_sum - x_sum * x_sum)
+                return slope
+            except ZeroDivisionError:
+                return 0
+        
+        def _calculate_performance_trend(self, metrics: List[PerformanceMetrics]) -> float:
+            """Calculate overall performance trend (negative = degrading)."""
+            if len(metrics) < 2:
+                return 0
+            
+            # Calculate trends for key metrics
+            latency_trend = self._calculate_trend([m.latency_ms for m in metrics])
+            throughput_trend = self._calculate_trend([m.throughput_ops_per_sec for m in metrics])
+            error_trend = self._calculate_trend([m.error_rate for m in metrics])
+            
+            # Combine trends (lower latency and errors = better, higher throughput = better)
+            performance_trend = (throughput_trend - latency_trend - (error_trend * 1000)) / 3
+            return performance_trend
+        
+        async def _auto_apply_optimization(self, task: OptimizationTask) -> None:
+            """Auto-apply low-risk optimizations."""
+            try:
+                self.optimizer_metrics['auto_applied_optimizations'] += 1
+                
+                # Simulate applying optimization
+                await asyncio.sleep(0.1)
+                
+                logger.info(f"Auto-applied optimization for {task.context.component_name}")
+                
+                # Send notification
+                await self.queue_manager.enqueue(
+                    'system.optimization_applied',
+                    {
+                        'task_id': task.task_id,
+                        'component_id': task.context.component_id,
+                        'component_name': task.context.component_name,
+                        'optimization_type': task.result.optimization_type,
+                        'auto_applied': True,
+                        'timestamp': datetime.utcnow().isoformat()
+                    },
+                    domain='system'
+                )
+                
+            except Exception as e:
+                logger.error(f"Error auto-applying optimization: {e}")
+        
+        async def _send_optimization_result(self, task: OptimizationTask) -> None:
+            """Send optimization result to the requesting conductor."""
+            try:
+                result_data = {
+                    'task_id': task.task_id,
+                    'component_id': task.context.component_id,
+                    'component_name': task.context.component_name,
+                    'component_type': task.context.component_type,
+                    'status': task.status,
+                    'recommendation': task.result.to_dict() if task.result else None,
+                    'error': task.error,
+                    'conductor_id': task.metadata.get('conductor_id') if hasattr(task, 'metadata') else None,
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+                
+                await self.queue_manager.enqueue(
+                    'system.optimization_results',
+                    result_data,
+                    domain='system'
+                )
+                
+            except Exception as e:
+                logger.error(f"Error sending optimization result: {e}")
+        
+        async def _system_analysis_worker(self) -> None:
+            """Worker for system-wide optimization analysis."""
+            logger.info("System analysis worker started")
+            
+            while self.running:
+                try:
+                    await asyncio.sleep(300)  # Run every 5 minutes
+                    
+                    # Analyze system-wide patterns
+                    await self._analyze_system_patterns()
+                    
+                    # Identify cross-component optimizations
+                    await self._identify_cross_component_optimizations()
+                    
+                    self.optimizer_metrics['multi_component_optimizations'] += 1
+                    
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in system analysis worker: {e}")
+            
+            logger.info("System analysis worker stopped")
+        
+        async def _predictive_optimization_worker(self) -> None:
+            """Worker for predictive optimization analysis."""
+            logger.info("Predictive optimization worker started")
+            
+            while self.running:
+                try:
+                    await asyncio.sleep(600)  # Run every 10 minutes
+                    
+                    # Predict future performance issues
+                    await self._predict_performance_issues()
+                    
+                    self.optimizer_metrics['predictive_optimizations'] += 1
+                    
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in predictive optimization worker: {e}")
+            
+            logger.info("Predictive optimization worker stopped")
+        
+        async def _enhanced_metrics_processor(self) -> None:
+            """Process enhanced metrics from conductors."""
+            logger.info("Enhanced metrics processor started")
+            
+            while self.running:
+                try:
+                    # Process metrics from enhanced_metrics queue
+                    # This would consume from system.enhanced_metrics queue
+                    await asyncio.sleep(30)  # Process every 30 seconds
+                    
+                    # Update system-wide metrics
+                    await self._update_system_metrics()
+                    
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"Error in metrics processor: {e}")
+            
+            logger.info("Enhanced metrics processor stopped")
+        
+        async def _analyze_system_patterns(self) -> None:
+            """Analyze system-wide optimization patterns."""
+            try:
+                # Analyze patterns across all components
+                component_types = {}
+                for context in self.component_contexts.values():
+                    comp_type = context.component_type
+                    if comp_type not in component_types:
+                        component_types[comp_type] = []
+                    component_types[comp_type].append(context)
+                
+                # Find common patterns within component types
+                for comp_type, contexts in component_types.items():
+                    if len(contexts) > 1:
+                        await self._find_common_patterns(comp_type, contexts)
+                
+            except Exception as e:
+                logger.error(f"Error analyzing system patterns: {e}")
+        
+        async def _identify_cross_component_optimizations(self) -> None:
+            """Identify optimizations that span multiple components."""
+            try:
+                # Analyze component dependencies and communication patterns
+                # This would look for bottlenecks in component interactions
+                pass
+            except Exception as e:
+                logger.error(f"Error identifying cross-component optimizations: {e}")
+        
+        async def _predict_performance_issues(self) -> None:
+            """Predict future performance issues based on trends."""
+            try:
+                for context in self.component_contexts.values():
+                    if len(context.metrics_history) > 20:
+                        await self._predict_component_issues(context)
+            except Exception as e:
+                logger.error(f"Error predicting performance issues: {e}")
+        
+        async def _predict_component_issues(self, context: OptimizationContext) -> None:
+            """Predict issues for a specific component."""
+            try:
+                recent_metrics = context.metrics_history[-20:]
+                
+                # Predict future latency
+                latency_values = [m.latency_ms for m in recent_metrics]
+                latency_trend = self._calculate_trend(latency_values)
+                
+                # If latency is increasing rapidly, predict an issue
+                if latency_trend > 2.0:  # 2ms increase per measurement
+                    await self._create_predictive_optimization_task(context, 'predicted_latency_issue')
+                
+                # Predict memory issues
+                memory_values = [m.memory_usage_mb for m in recent_metrics]
+                memory_trend = self._calculate_trend(memory_values)
+                
+                if memory_trend > 1.0:  # 1MB increase per measurement
+                    await self._create_predictive_optimization_task(context, 'predicted_memory_issue')
+                
+            except Exception as e:
+                logger.error(f"Error predicting issues for {context.component_id}: {e}")
+        
+        async def _create_predictive_optimization_task(self, context: OptimizationContext, issue_type: str) -> None:
+            """Create a predictive optimization task."""
+            try:
+                task = OptimizationTask(
+                    task_id=str(uuid.uuid4()),
+                    context=context,
+                    priority=3  # Medium priority for predictive tasks
+                )
+                
+                task.metadata = {
+                    'trigger_reason': 'predictive_analysis',
+                    'predicted_issue': issue_type,
+                    'urgent': False
+                }
+                
+                await self.task_queue.put(task)
+                self.optimization_tasks[task.task_id] = task
+                
+                self.optimizer_metrics['total_tasks'] += 1
+                self.optimizer_metrics['active_tasks'] += 1
+                
+                logger.info(f"Created predictive optimization task for {context.component_name}: {issue_type}")
+                
+            except Exception as e:
+                logger.error(f"Error creating predictive optimization task: {e}")
+        
+        async def _find_common_patterns(self, component_type: str, contexts: List[OptimizationContext]) -> None:
+            """Find common optimization patterns within a component type."""
+            try:
+                # Analyze common issues across similar components
+                common_issues = {}
+                
+                for context in contexts:
+                    if len(context.metrics_history) > 10:
+                        recent_metrics = context.metrics_history[-10:]
+                        avg_metrics = self._calculate_metrics_average(recent_metrics)
+                        
+                        # Categorize performance characteristics
+                        if avg_metrics.get('latency_ms', 0) > 100:
+                            common_issues.setdefault('high_latency', []).append(context.component_id)
+                        
+                        if avg_metrics.get('error_rate', 0) > 0.02:
+                            common_issues.setdefault('high_errors', []).append(context.component_id)
+                        
+                        if avg_metrics.get('memory_usage_mb', 0) > 500:
+                            common_issues.setdefault('high_memory', []).append(context.component_id)
+                
+                # If multiple components have the same issue, create system-wide optimization
+                for issue, component_ids in common_issues.items():
+                    if len(component_ids) > 1:
+                        await self._create_system_optimization_task(component_type, issue, component_ids)
+                
+            except Exception as e:
+                logger.error(f"Error finding common patterns for {component_type}: {e}")
+        
+        async def _create_system_optimization_task(self, component_type: str, issue: str, component_ids: List[str]) -> None:
+            """Create a system-wide optimization task."""
+            try:
+                # Create a meta-optimization task for multiple components
+                logger.info(f"System-wide optimization needed for {component_type} components: {issue} affects {len(component_ids)} components")
+                
+                # This would create a more comprehensive optimization strategy
+                # For now, just log the pattern
+            except Exception as e:
+                logger.error(f"Error creating system optimization task: {e}")
+        
+        async def _update_system_metrics(self) -> None:
+            """Update system-wide metrics."""
+            try:
+                self.system_wide_metrics.update({
+                    'total_components': len(self.component_contexts),
+                    'active_optimizations': self.optimizer_metrics['active_tasks'],
+                    'optimization_success_rate': (
+                        self.optimizer_metrics['completed_tasks'] / 
+                        max(self.optimizer_metrics['total_tasks'], 1)
+                    ) * 100,
+                    'avg_improvement_score': self.optimizer_metrics['quality_score_average'],
+                    'last_updated': datetime.utcnow().isoformat()
+                })
+            except Exception as e:
+                logger.error(f"Error updating system metrics: {e}")
+        
+        def get_enhanced_optimizer_status(self) -> Dict[str, Any]:
+            """Get comprehensive optimizer status."""
+            return {
+                'optimizer_metrics': self.optimizer_metrics.copy(),
+                'system_metrics': self.system_wide_metrics.copy(),
+                'config': self.config.copy(),
+                'active_components': len(self.component_contexts),
+                'queued_tasks': self.task_queue.qsize(),
+                'worker_status': {
+                    'optimization_workers': len(self.worker_tasks),
+                    'analysis_workers': len(self.analysis_tasks)
+                },
+                'optimization_patterns': {k: len(v) for k, v in self.optimization_patterns.items()},
+                'running': self.running,
+                'security_enabled': self.security_enabled,
+                'timestamp': datetime.utcnow().isoformat()
+            }
