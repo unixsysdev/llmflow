@@ -16,6 +16,7 @@ from enum import Enum
 
 from ..base import BaseTransport, TransportPlugin, TransportConfig, TransportState
 from ...plugins.interfaces.transport import TransportType, TransportError
+from .reliability import ReliabilityManager
 
 logger = logging.getLogger(__name__)
 
@@ -112,232 +113,14 @@ class UDPMessage:
 
 
 
-class UDPReliabilityLayer:
-    """Reliability layer for UDP transport."""
-    
-    def __init__(self, config):
-        self.config = config
-        self.sequence_number = 0
-        self.pending_acks: Dict[int, UDPMessage] = {}
-        self.received_fragments: Dict[int, Dict[int, UDPMessage]] = {}
-        self.last_received_seq = -1
-        self.send_window = set()
-        self.receive_window = set()
-        self._lock = asyncio.Lock()
-        self._send_ack_callback: Optional[Callable] = None
-        self._retransmit_callback: Optional[Callable] = None
+# NOTE: UDPReliabilityLayer has been replaced by ReliabilityManager
+# The old implementation is commented out as it's no longer used.
+# See llmflow/transport/udp/reliability.py for the new implementation.
 
-    def set_ack_callback(self, callback: Callable[[bytes, Tuple[str, int]], None]) -> None:
-        """Set callback function for sending ACK messages."""
-        self._send_ack_callback = callback
+# class UDPReliabilityLayer:
+#     [Old implementation removed - replaced by ReliabilityManager]
 
-    def set_retransmit_callback(self, callback: Callable[[bytes], None]) -> None:
-        """Set callback function for retransmitting messages."""
-        self._retransmit_callback = callback
-    
-    def get_next_sequence_number(self) -> int:
-        """Get next sequence number."""
-        self.sequence_number = (self.sequence_number + 1) % (2 ** self.config.sequence_number_bits)
-        return self.sequence_number
-    
-    def fragment_data(self, data: bytes) -> List[bytes]:
-        """Fragment large data into smaller chunks."""
-        if len(data) <= self.config.fragment_size:
-            return [data]
-        
-        fragments = []
-        offset = 0
-        while offset < len(data):
-            fragment = data[offset:offset + self.config.fragment_size]
-            fragments.append(fragment)
-            offset += self.config.fragment_size
-        
-        return fragments
-    
-    async def send_reliable(self, data: bytes, send_func) -> bool:
-        """Send data with reliability."""
-        try:
-            fragments = self.fragment_data(data)
-            seq_num = self.get_next_sequence_number()
-            total_fragments = len(fragments)
-            
-            # Send all fragments
-            for i, fragment in enumerate(fragments):
-                message = UDPMessage(
-                    msg_type=UDPMessageType.DATA,
-                    sequence_number=seq_num,
-                    fragment_id=i,
-                    total_fragments=total_fragments,
-                    data=fragment,
-                    timestamp=time.time()
-                )
-                
-                if self.config.reliability_mode == ReliabilityMode.ACKNOWLEDGMENT:
-                    # Store for potential retransmission
-                    self.pending_acks[seq_num] = message
-                
-                # Send the message
-                await send_func(message.to_bytes())
-            
-            # Wait for acknowledgment if required
-            if self.config.reliability_mode == ReliabilityMode.ACKNOWLEDGMENT:
-                return await self._wait_for_ack(seq_num)
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Reliable send failed: {e}")
-            return False
-    
-    async def receive_reliable(self, receive_func) -> Optional[bytes]:
-        """Receive data with reliability."""
-        try:
-            # Receive raw data
-            raw_data = await receive_func()
-            if not raw_data:
-                return None
-            
-            data, sender = raw_data
-            
-            # Parse message
-            try:
-                message = UDPMessage.from_bytes(data)
-            except ValueError as e:
-                logger.warning(f"Invalid message received: {e}")
-                return None
-            
-            # Handle different message types
-            if message.msg_type == UDPMessageType.DATA:
-                return await self._handle_data_message(message, sender)
-            elif message.msg_type == UDPMessageType.ACK:
-                await self._handle_ack_message(message)
-            elif message.msg_type == UDPMessageType.PING:
-                await self._handle_ping_message(message, sender)
-            elif message.msg_type == UDPMessageType.PONG:
-                await self._handle_pong_message(message, sender)
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Reliable receive failed: {e}")
-            return None
-    
-    async def _handle_data_message(self, message: UDPMessage, sender) -> Optional[bytes]:
-        """Handle incoming data message."""
-        seq_num = message.sequence_number
-        
-        # Send acknowledgment if required
-        if self.config.reliability_mode == ReliabilityMode.ACKNOWLEDGMENT:
-            ack_message = UDPMessage(
-                msg_type=UDPMessageType.ACK,
-                sequence_number=seq_num,
-                fragment_id=0,
-                total_fragments=1,
-                data=b''
-            )
-            # Send ACK back to sender
-            try:
-                ack_data = ack_message.to_bytes()
-                if hasattr(self, '_send_ack_callback') and self._send_ack_callback:
-                    await self._send_ack_callback(ack_data, sender)
-                else:
-                    logger.warning(f"No ACK callback set, cannot send ACK for sequence {seq_num}")
-            except Exception as e:
-                logger.error(f"Failed to send ACK for sequence {seq_num}: {e}")
-        
-        # Handle fragmentation
-        if message.total_fragments > 1:
-            # Store fragment
-            if seq_num not in self.received_fragments:
-                self.received_fragments[seq_num] = {}
-            
-            self.received_fragments[seq_num][message.fragment_id] = message
-            
-            # Check if all fragments received
-            if len(self.received_fragments[seq_num]) == message.total_fragments:
-                # Reassemble data
-                fragments = self.received_fragments[seq_num]
-                sorted_fragments = sorted(fragments.items())
-                
-                reassembled_data = b''.join(frag.data for _, frag in sorted_fragments)
-                
-                # Clean up
-                del self.received_fragments[seq_num]
-                
-                return reassembled_data
-        else:
-            # Single fragment message
-            return message.data
-        
-        return None
-    
-    async def _handle_ack_message(self, message: UDPMessage) -> None:
-        """Handle acknowledgment message."""
-        seq_num = message.sequence_number
-        if seq_num in self.pending_acks:
-            del self.pending_acks[seq_num]
-            logger.debug(f"Received ACK for sequence {seq_num}")
-    
-    async def _handle_ping_message(self, message: UDPMessage, sender) -> None:
-        """Handle ping message."""
-        logger.debug(f"Received PING from {sender}")
-        
-        # Send PONG response
-        try:
-            pong_message = UDPMessage(
-                msg_type=UDPMessageType.PONG,
-                sequence_number=message.sequence_number,
-                fragment_id=0,
-                total_fragments=1,
-                data=message.data
-            )
-            
-            pong_data = pong_message.to_bytes()
-            
-            if hasattr(self, '_send_ack_callback') and self._send_ack_callback:
-                await self._send_ack_callback(pong_data, sender)
-                logger.debug(f"Sent PONG to {sender}")
-            else:
-                logger.warning(f"No callback set, cannot send PONG to {sender}")
-                
-        except Exception as e:
-            logger.error(f"Failed to send PONG to {sender}: {e}")
 
-    async def _handle_pong_message(self, message: UDPMessage, sender) -> None:
-        """Handle pong message."""
-        logger.debug(f"Received PONG from {sender} for sequence {message.sequence_number}")
-
-    async def _wait_for_ack(self, seq_num: int) -> bool:
-        """Wait for acknowledgment."""
-        for attempt in range(self.config.max_retries):
-            await asyncio.sleep(self.config.ack_timeout)
-            
-            if seq_num not in self.pending_acks:
-                return True  # ACK received
-            
-            # Retransmit if configured and not the last attempt
-            if (self.config.reliability_mode == ReliabilityMode.RETRANSMISSION and 
-                attempt < self.config.max_retries - 1):
-                try:
-                    message = self.pending_acks[seq_num]
-                    message_data = message.to_bytes()
-                    
-                    if hasattr(self, '_retransmit_callback') and self._retransmit_callback:
-                        await self._retransmit_callback(message_data)
-                        logger.debug(f"Retransmitted sequence {seq_num}, attempt {attempt + 1}")
-                    else:
-                        logger.warning(f"No retransmit callback set, cannot retransmit sequence {seq_num}")
-                        
-                except Exception as e:
-                    logger.error(f"Failed to retransmit sequence {seq_num}: {e}")
-        
-        # Remove from pending after max retries
-        if seq_num in self.pending_acks:
-            del self.pending_acks[seq_num]
-        
-        return False  # ACK not received
-  # ACK not received
-  # ACK not received
 
 
 class UDPTransport(BaseTransport):
@@ -346,40 +129,19 @@ class UDPTransport(BaseTransport):
     def __init__(self, config: UDPConfig):
         super().__init__(config)
         self.socket: Optional[socket.socket] = None
-        self.reliability_layer = UDPReliabilityLayer(config)
+        # FIXED: Use ReliabilityManager instead of UDPReliabilityLayer for better reliability
+        self.reliability_manager = ReliabilityManager(
+            max_retries=config.max_retries,
+            ack_timeout=config.timeout,
+            enable_flow_control=True
+        )
         self.remote_endpoint: Optional[Tuple[str, int]] = None
-        
-        # Set up callbacks for reliability layer
-        self.reliability_layer.set_ack_callback(self._send_ack)
-        self.reliability_layer.set_retransmit_callback(self._retransmit_message)
 
-    async def _send_ack(self, ack_data: bytes, sender: Tuple[str, int]) -> None:
-        """Send ACK message back to sender."""
-        try:
-            if not self.socket:
-                logger.error("Cannot send ACK: socket not initialized")
-                return
-            
-            # Send ACK directly to the sender
-            await self._raw_send(ack_data, sender)
-            logger.debug(f"Sent ACK to {sender}")
-            
-        except Exception as e:
-            logger.error(f"Failed to send ACK to {sender}: {e}")
 
-    async def _retransmit_message(self, message_data: bytes) -> None:
-        """Retransmit a message to the current remote endpoint."""
-        try:
-            if not self.socket or not self.remote_endpoint:
-                logger.error("Cannot retransmit: socket or remote endpoint not available")
-                return
-            
-            # Retransmit to the current remote endpoint
-            await self._raw_send(message_data, self.remote_endpoint)
-            logger.debug(f"Retransmitted message to {self.remote_endpoint}")
-            
-        except Exception as e:
-            logger.error(f"Failed to retransmit message: {e}")
+    # NOTE: _send_ack and _retransmit_message methods removed
+# These were callbacks for the old UDPReliabilityLayer.
+# ACK handling is now integrated directly in _internal_receive method.
+# Retransmission is handled by ReliabilityManager.
 
     def get_transport_type(self) -> TransportType:
         return TransportType.UDP
@@ -392,6 +154,9 @@ class UDPTransport(BaseTransport):
             self.socket.bind((self.config.address, self.config.port))
             self.socket.setblocking(False)
             
+            # Start reliability manager
+            await self.reliability_manager.start()
+            
             logger.info(f"UDP transport bound to {self.config.address}:{self.config.port}")
             return True
             
@@ -401,6 +166,7 @@ class UDPTransport(BaseTransport):
                 self.socket.close()
                 self.socket = None
             return False
+
     
     async def _internal_connect(self) -> bool:
         """Internal connect implementation."""
@@ -408,6 +174,9 @@ class UDPTransport(BaseTransport):
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.socket.setblocking(False)
             self.remote_endpoint = (self.config.address, self.config.port)
+            
+            # Start reliability manager
+            await self.reliability_manager.start()
             
             logger.info(f"UDP transport connected to {self.config.address}:{self.config.port}")
             return True
@@ -418,6 +187,7 @@ class UDPTransport(BaseTransport):
                 self.socket.close()
                 self.socket = None
             return False
+
     
     async def _internal_send(self, data: bytes, endpoint: Optional[Tuple[str, int]] = None) -> bool:
         """Internal send implementation."""
@@ -429,18 +199,32 @@ class UDPTransport(BaseTransport):
             if not target_endpoint:
                 raise TransportError("No target endpoint specified")
             
-            # Use reliability layer if enabled
+            # Use reliability manager if enabled
             if self.config.reliability_mode != ReliabilityMode.NONE:
-                async def send_func(msg_data: bytes):
-                    await self._raw_send(msg_data, target_endpoint)
+                sequence_number = self.reliability_manager.get_next_sequence_number()
                 
-                return await self.reliability_layer.send_reliable(data, send_func)
+                # Create UDP message
+                udp_message = UDPMessage(
+                    msg_type=UDPMessageType.DATA,
+                    sequence_number=sequence_number,
+                    fragment_id=0,
+                    total_fragments=1,
+                    data=data
+                )
+                
+                async def send_func(msg_data: bytes):
+                    # Send the formatted UDP message
+                    await self._raw_send(udp_message.to_bytes(), target_endpoint)
+                
+                return await self.reliability_manager.send_reliable(data, send_func)
             else:
                 return await self._raw_send(data, target_endpoint)
             
         except Exception as e:
             logger.error(f"UDP send failed: {e}")
             return False
+
+
     
     async def _raw_send(self, data: bytes, endpoint: Tuple[str, int]) -> bool:
         """Raw UDP send without reliability."""
@@ -458,21 +242,61 @@ class UDPTransport(BaseTransport):
             if not self.socket:
                 raise TransportError("Socket not initialized")
             
-            # Use reliability layer if enabled
+            # Use reliability manager if enabled
             if self.config.reliability_mode != ReliabilityMode.NONE:
-                async def receive_func():
-                    return await self._raw_receive(timeout)
+                # Receive raw data and parse UDP messages
+                raw_result = await self._raw_receive(timeout)
+                if not raw_result:
+                    return None
                 
-                data = await self.reliability_layer.receive_reliable(receive_func)
-                if data:
-                    return data, None  # Sender info handled by reliability layer
-                return None
+                raw_data, sender_addr = raw_result
+                
+                try:
+                    # Parse UDP message
+                    udp_message = UDPMessage.from_bytes(raw_data)
+                    
+                    # Handle ACK messages
+                    if udp_message.msg_type == UDPMessageType.ACK:
+                        await self.reliability_manager.handle_ack(udp_message.sequence_number)
+                        return None  # ACKs are not returned to application
+                    
+                    # Handle data messages through reliability manager
+                    elif udp_message.msg_type == UDPMessageType.DATA:
+                        is_duplicate, is_out_of_order = await self.reliability_manager.handle_received_message(
+                            udp_message.sequence_number, udp_message.data
+                        )
+                        
+                        # Send ACK for this message
+                        ack_message = UDPMessage(
+                            msg_type=UDPMessageType.ACK,
+                            sequence_number=udp_message.sequence_number,
+                            fragment_id=0,
+                            total_fragments=1,
+                            data=b""
+                        )
+                        await self._raw_send(ack_message.to_bytes(), sender_addr)
+                        
+                        # Return data if not duplicate
+                        if not is_duplicate:
+                            return udp_message.data, sender_addr
+                        else:
+                            return None  # Skip duplicate messages
+                    
+                    else:
+                        # Handle other message types (PING, PONG, etc.)
+                        return udp_message.data, sender_addr
+                        
+                except ValueError as e:
+                    logger.warning(f"Failed to parse UDP message: {e}")
+                    return None
+                
             else:
                 return await self._raw_receive(timeout)
             
         except Exception as e:
             logger.error(f"UDP receive failed: {e}")
             return None
+
     
     async def _raw_receive(self, timeout: Optional[float] = None) -> Optional[Tuple[bytes, Tuple[str, int]]]:
         """Raw UDP receive without reliability."""
@@ -498,6 +322,9 @@ class UDPTransport(BaseTransport):
     async def _internal_close(self) -> None:
         """Internal close implementation."""
         try:
+            # Stop reliability manager
+            await self.reliability_manager.stop()
+            
             if self.socket:
                 self.socket.close()
                 self.socket = None
@@ -505,6 +332,7 @@ class UDPTransport(BaseTransport):
                 logger.info("UDP transport closed")
         except Exception as e:
             logger.error(f"UDP close failed: {e}")
+
 
     async def ping(self, endpoint: Optional[Tuple[str, int]] = None, timeout: float = 5.0) -> bool:
         """Send a ping message and wait for pong response."""

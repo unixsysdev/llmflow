@@ -56,6 +56,8 @@ class PendingMessage:
     retries: int = 0
     last_retry: float = 0.0
     ack_received: bool = False
+    send_callback: Optional[Callable[[bytes], None]] = None
+
 
 
 class FlowController:
@@ -280,11 +282,12 @@ class ReliabilityManager:
             logger.warning(f"Flow control prevents sending message {sequence_number}")
             return False
         
-        # Create pending message
+        # Create pending message with send_callback for retransmission
         pending_msg = PendingMessage(
             sequence_number=sequence_number,
             data=data,
-            timestamp=time.time()
+            timestamp=time.time(),
+            send_callback=send_callback
         )
         
         self.pending_messages[sequence_number] = pending_msg
@@ -304,6 +307,7 @@ class ReliabilityManager:
             logger.error(f"Failed to send message {sequence_number}: {e}")
             del self.pending_messages[sequence_number]
             return False
+
     
     async def handle_ack(self, sequence_number: int) -> None:
         """Handle acknowledgment for a sequence number."""
@@ -403,16 +407,21 @@ class ReliabilityManager:
             pending_msg.retries += 1
             pending_msg.last_retry = time.time()
             
-            # TODO: Implement actual retransmission
-            # This would require access to the send function
+            # FIXED: Implement actual retransmission using stored send_callback
+            if pending_msg.send_callback:
+                try:
+                    await pending_msg.send_callback(pending_msg.data)
+                    logger.debug(f"Retransmitted message {sequence_number}, attempt {pending_msg.retries}")
+                except Exception as e:
+                    logger.error(f"Retransmission failed for {sequence_number}: {e}")
             
             self.stats['messages_retransmitted'] += 1
-            logger.debug(f"Retransmitting message {sequence_number}, attempt {pending_msg.retries}")
         else:
             # Max retries reached, give up
             del self.pending_messages[sequence_number]
             self.stats['timeouts'] += 1
             logger.warning(f"Message {sequence_number} timed out after {self.max_retries} retries")
+
     
     def get_stats(self) -> Dict[str, any]:
         """Get reliability statistics."""
